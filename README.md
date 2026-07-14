@@ -69,7 +69,7 @@ For this design, queues are used as buffers for storing messages because they ha
 
 <img width="869" height="562" alt="image" src="https://github.com/user-attachments/assets/dfe5d1ac-32e8-4f55-b9ef-92b66e5c8592" />
 
-As illustrated above, the halt command is the first to arrive in the queue so it is the first command to be serviced by the command task. A last-in, last-out (LIFO) structure like a stack present an issue for servicing this halt command, as shown below
+As illustrated above, the halt command is the first to arrive in the queue so it is the first command to be serviced by the command task. A last-in, first-out (LIFO) structure like a stack present an issue for servicing this halt command, as shown below
 
 <img width="1014" height="356" alt="image" src="https://github.com/user-attachments/assets/d810808e-2d43-4f89-8a08-e9e157118f74" />
 
