@@ -10,6 +10,11 @@ void Telemetry_Task(void *pvParams);
 void Motor_Task(void *pvParams);
 void Command_Received_Handler(const uint8_t *mac_addr, const uint8_t *data, int len);
 
+constexpr int MOTOR_PIN_1 = 4;
+constexpr int MOTOR_PIN_1_chan = 0;
+constexpr int MOTOR_PIN_1_freq = 2000; //Hz
+
+
 TaskHandle_t Command_Task_ID;
 TaskHandle_t Telemetry_Task_ID;
 TaskHandle_t Motor_Task_ID;
@@ -29,17 +34,22 @@ enum Packet_Type{
   TELEMETRY
 };
 
+
 packet telemetry_structure;
 packet telemetry_sent;
 packet command_received;
 
 uint8_t BASE_STATION_MAC_ADDR[6] = {0x30,0x76,0xF5,0xB9,0xE2,0x94};
 
+QueueHandle_t Packet_Queue_ID = xQueueCreate(10, sizeof(command_received));
+
+uint8_t motor_status = START_COMMAND;
 
 void setup() {
 
 Serial.begin(115200);
 
+//Wifi setup
 WiFi.mode(WIFI_STA);
 esp_now_init();
 
@@ -51,7 +61,6 @@ peerInfo.encrypt = false;
 peerInfo.channel = 0;
 peerInfo.ifidx = WIFI_IF_STA;
 
-
 esp_now_add_peer(&peerInfo);
 
 
@@ -60,11 +69,21 @@ Serial.println("UGV MAC Address: ");
 Serial.println(WiFi.macAddress());
 Serial.println("================");
 
+//Timer setup
+
+Serial.println(ledcSetup(MOTOR_PIN_1_chan, MOTOR_PIN_1_freq, 8));
+ledcAttachPin(MOTOR_PIN_1, MOTOR_PIN_1_chan);
+ledcWrite(MOTOR_PIN_1_chan, 127);
+
+
+
+//Task setup
 constexpr configSTACK_DEPTH_TYPE STACK_SIZE_BYTES = 4096;
 
 constexpr UBaseType_t COMMAND_TASK_PRIORITY = 5; 
 constexpr UBaseType_t TELEMETRY_TASK_PRIORITY = 5;
 constexpr UBaseType_t MOTOR_TASK_PRIORITY = 8;
+
   
 xTaskCreate(
   Command_Task,
@@ -104,7 +123,9 @@ void loop() {
 
 void Command_Task(void *pvParams){
     for(;;){
-      vTaskDelay(pdMS_TO_TICKS(1000));
+      xQueueReceive(Packet_Queue_ID, &command_received, portMAX_DELAY);
+      motor_status = command_received.command_type;
+      vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 }
@@ -117,7 +138,22 @@ void Telemetry_Task(void *pvParams){
 
 void Motor_Task(void *pvParams){
     for(;;){
-      vTaskDelay(pdMS_TO_TICKS(1000));
+      switch(motor_status){
+        case START_COMMAND:
+          ledcAttachPin(MOTOR_PIN_1, MOTOR_PIN_1_chan);
+          ledcWrite(MOTOR_PIN_1_chan, 127);
+          break;
+
+        case HALT_COMMAND:
+          ledcWrite(MOTOR_PIN_1, 0);
+          ledcDetachPin(MOTOR_PIN_1);
+          break;
+
+        default:
+          ledcWrite(MOTOR_PIN_1, 0);
+
+      }
+      vTaskDelay(pdMS_TO_TICKS(25));
     }
 
 }
@@ -129,8 +165,6 @@ if (len!=sizeof(command_received)){
 }
 
 memcpy(&command_received, data, len);
-
-  Serial.println(command_received.packet_type);
-  Serial.println(command_received.command_type);
+xQueueSend(Packet_Queue_ID, &command_received, 0);
 
 }
