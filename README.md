@@ -1,8 +1,5 @@
 # UGV Swarm Base Station
 
-## Note
-The code for the implementation below is still in progress. This note will be removed once the code is complete.
-
 ## Overview
 An ESP32 base station will be used to send commands to and receive telemetry from three ESP32-based unmanned ground vehicles (UGVs). A laptop terminal will be used to interface with an ESP32 that will send/receive using the ESP-NOW wireless communication protocol. The hardware layout is shown below
 
