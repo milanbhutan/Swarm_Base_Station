@@ -35,8 +35,8 @@ TaskHandle_t Send_Telemetry_Task_ID;
 TaskHandle_t Motor_Task_ID;
 TaskHandle_t Get_Telem_Task_ID;
 
-QueueHandle_t Command_Queue_ID = xQueueCreate(10, sizeof(command_received));
-QueueHandle_t Telemetry_Queue_ID = xQueueCreate(10, sizeof(telemetry_sent));
+QueueHandle_t Command_Queue_ID = xQueueCreate(10, sizeof(packet));
+QueueHandle_t Telemetry_Queue_ID = xQueueCreate(10, sizeof(packet));
 
 uint8_t BASE_STATION_MAC_ADDR[6] = {0x30, 0x76, 0xF5, 0xB9, 0xE2, 0x94};
 
@@ -144,8 +144,8 @@ void Execute_Command_Task(void *pvParams){
 void Send_Telemetry_Task(void *pvParams){
     for(;;){
       xQueueReceive(Telemetry_Queue_ID, &telemetry_sent, portMAX_DELAY);
-      esp_now_send(BASE_STATION_MAC_ADDR,(uint8_t *)&telemetry_sent, sizeof(telemetry_sent));
-      vTaskDelay(pdMS_TO_TICKS(1000));
+      esp_now_send(BASE_STATION_MAC_ADDR,(uint8_t *)&telemetry_sent, sizeof(packet));
+      vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
@@ -174,18 +174,35 @@ void Motor_Task(void *pvParams){
 void Get_Telem_Task(void *pvParams){
 for(;;){
   telemetry_sent.battery_life += 1;
-  telemetry_sent.roll_angle += 1;
-  telemetry_sent.pitch_angle += 1;
+  telemetry_sent.roll_angle += 4;
+  telemetry_sent.pitch_angle += 5;
   telemetry_sent.yaw_angle += 1;
+  
+  if(telemetry_sent.battery_life > 99){
+    telemetry_sent.battery_life = 50;
+  }
+
+  if(telemetry_sent.roll_angle > 20){
+    telemetry_sent.roll_angle = 0;
+  }
+
+  if(telemetry_sent.pitch_angle > 20){
+    telemetry_sent.pitch_angle = 0;
+  }
+
+  if(telemetry_sent.yaw_angle > 180){
+    telemetry_sent.yaw_angle = 0;
+  }
+
   xQueueSend(Telemetry_Queue_ID, &telemetry_sent, portMAX_DELAY);
-  vTaskDelay(pdMS_TO_TICKS(1000));
+  vTaskDelay(pdMS_TO_TICKS(200));
 }
 
 }
 
 void Command_Received_Handler(const uint8_t *mac_address, const uint8_t* data, int len){
 
-if (len!=sizeof(command_received)){
+if (len!=sizeof(packet)){
   return;
 }
 

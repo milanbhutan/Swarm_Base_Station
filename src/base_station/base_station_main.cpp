@@ -5,8 +5,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-//Base Station MAC address: 30:76:F5:B9:E2:94
-//UGV1 MAC address (ESP32-S3): A4:CB:8F:D9:2D:D8
+//Base Station MAC address: 30:76:F5:B9:E2:94 (COM13)
+//UGV1 MAC address (ESP32-S3): A4:CB:8F:D9:2D:D8 (COM5)
+//UGV2 MAC address (ESP32-S3): 30:30:F9:16:39:40 (COM4)
+//UGV3 MAC address (ESP32-S3): 84:FC:E6:65:30:30 (COM6)
 
 
 struct packet{
@@ -50,12 +52,17 @@ packet start_command = {};
 packet halt_command = {};
 packet command_sent = {};
 packet telemetry_received = {};
+packet UGV1_telem = {};
+packet UGV2_telem = {};
+packet UGV3_telem = {};
 
 
-uint8_t UGV1_MAC_ADDR[6] = {0xA4,0xCB,0x8F,0xD9,0x2D,0xD8};
+uint8_t UGV1_MAC_ADDR[6] = {0xA4, 0xCB, 0x8F, 0xD9, 0x2D, 0xD8};
+uint8_t UGV2_MAC_ADDR[6] = {0x30, 0x30, 0xF9, 0x16, 0x39, 0x40};
+uint8_t UGV3_MAC_ADDR[6] = {0x84, 0xFC, 0xE6, 0x65, 0x30, 0x30};
 
 QueueHandle_t Command_Queue_ID = xQueueCreate(10 , sizeof(packet));
-QueueHandle_t Telemetry_Queue_ID = xQueueCreate(10, sizeof(telemetry_received));
+QueueHandle_t Telemetry_Queue_ID = xQueueCreate(10, sizeof(packet));
 
 void setup() {
   Serial.begin(115200);
@@ -65,21 +72,40 @@ void setup() {
 
   esp_now_register_recv_cb(Telemetry_Received_Handler);
   
-  esp_now_peer_info_t peerInfo = {};
-  memcpy(peerInfo.peer_addr, UGV1_MAC_ADDR, 6);
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-  peerInfo.ifidx = WIFI_IF_STA;
+  esp_now_peer_info_t peerInfo_UGV1 = {};
+  memcpy(peerInfo_UGV1.peer_addr, UGV1_MAC_ADDR, 6);
+  peerInfo_UGV1.channel = 0;
+  peerInfo_UGV1.encrypt = false;
+  peerInfo_UGV1.ifidx = WIFI_IF_STA;
 
-
-  esp_now_add_peer(&peerInfo);
+  esp_now_add_peer(&peerInfo_UGV1);
   
+
+  esp_now_peer_info_t peerInfo_UGV2 = {};
+  memcpy(peerInfo_UGV2.peer_addr, UGV2_MAC_ADDR, 6);
+  peerInfo_UGV2.channel = 0;
+  peerInfo_UGV2.encrypt = false;
+  peerInfo_UGV2.ifidx = WIFI_IF_STA;
+
+  esp_now_add_peer(&peerInfo_UGV2);
+
+
+  esp_now_peer_info_t peerInfo_UGV3 = {};
+  memcpy(peerInfo_UGV3.peer_addr, UGV3_MAC_ADDR, 6);
+  peerInfo_UGV3.channel = 0;
+  peerInfo_UGV3.encrypt = false;
+  peerInfo_UGV3.ifidx = WIFI_IF_STA;
+
+  esp_now_add_peer(&peerInfo_UGV3);
+
+
+
+
 
   Serial.println("=====================");
   Serial.println("Base Station MAC Address"); 
   Serial.println(WiFi.macAddress());
   Serial.println("=====================");
-  
   
   
   constexpr configSTACK_DEPTH_TYPE STACK_SIZE_BYTES = 4096;
@@ -121,7 +147,6 @@ void setup() {
 
 }
 
-
 void loop(){
   vTaskDelay(pdMS_TO_TICKS(1000));
 }
@@ -129,7 +154,7 @@ void loop(){
 void Send_Command_Task(void *pvParams){
   for(;;){
     xQueueReceive(Command_Queue_ID, &command_sent, portMAX_DELAY);
-    esp_now_send(UGV1_MAC_ADDR, (uint8_t *)&command_sent, sizeof(command_sent));
+    esp_now_send(NULL, (uint8_t *)&command_sent, sizeof(packet));
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 
@@ -137,15 +162,73 @@ void Send_Command_Task(void *pvParams){
 
 void Display_Telemetry_Task(void *pvParams){
   for(;;){
-    xQueueReceive(Telemetry_Queue_ID, &telemetry_received, portMAX_DELAY);
+    for(int num_packets = 0; num_packets < 3; num_packets++){
+      xQueueReceive(Telemetry_Queue_ID, &telemetry_received, portMAX_DELAY);
     
-    if(memcmp(telemetry_received.mac_addr, UGV1_MAC_ADDR, 6) && TELEM_MODE == true){
-      Serial.println("UGV 1 Telemetry:");
-      Serial.println(telemetry_received.battery_life);
-      Serial.println(telemetry_received.roll_angle);
-      Serial.println(telemetry_received.pitch_angle);
-      Serial.println(telemetry_received.yaw_angle);
+      if(memcmp(telemetry_received.mac_addr, UGV1_MAC_ADDR, 6) == 0){
+        memcpy(&UGV1_telem, &telemetry_received, sizeof(packet));
+      }
+
+      if(memcmp(telemetry_received.mac_addr, UGV2_MAC_ADDR, 6 ) == 0){
+        memcpy(&UGV2_telem, &telemetry_received, sizeof(packet));
+      }
+
+      if(memcmp(telemetry_received.mac_addr, UGV3_MAC_ADDR, 6) == 0){
+        memcpy(&UGV3_telem, &telemetry_received, sizeof(packet));
+      }
+
+  }
+
+    if(TELEM_MODE == true){
+      Serial.print("\n");
+      Serial.print("UGV 1 Telemetry: \n");
+      Serial.print("Battery Life: ");
+      Serial.print(UGV1_telem.battery_life);
+      Serial.print("%\n");
+      Serial.print("Roll Angle: ");
+      Serial.print(UGV1_telem.roll_angle);
+      Serial.print("°\n");
+      Serial.print("Pitch Angle: ");
+      Serial.print(UGV1_telem.pitch_angle);
+      Serial.print("°\n");
+      Serial.print("Yaw Angle: ");
+      Serial.print(UGV1_telem.yaw_angle);
+      Serial.print("°\n");
+      
+      Serial.print("\n");
+      Serial.print("UGV 2 Telemetry: \n");
+      Serial.print("Battery Life: ");
+      Serial.print(UGV2_telem.battery_life);
+      Serial.print("%\n");
+      Serial.print("Roll Angle: ");
+      Serial.print(UGV2_telem.roll_angle);
+      Serial.print("°\n");
+      Serial.print("Pitch Angle: ");
+      Serial.print(UGV2_telem.pitch_angle);
+      Serial.print("°\n");
+      Serial.print("Yaw Angle: ");
+      Serial.print(UGV2_telem.yaw_angle);
+      Serial.print("°\n");
+
+      Serial.print("\n");
+      Serial.print("UGV 3 Telemetry: \n");
+      Serial.print("Battery Life: ");
+      Serial.print(UGV3_telem.battery_life);
+      Serial.print("%\n");
+      Serial.print("Roll Angle: ");
+      Serial.print(UGV3_telem.roll_angle);
+      Serial.print("°\n");
+      Serial.print("Pitch Angle: ");
+      Serial.print(UGV3_telem.pitch_angle);
+      Serial.print("°\n");
+      Serial.print("Yaw Angle: ");
+      Serial.print(UGV3_telem.yaw_angle);
+      Serial.print("°\n");
+      Serial.print("\n");
+      Serial.print("===============================");
+      Serial.print("\n");
     }
+
 
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
@@ -207,8 +290,8 @@ if(len!=sizeof(telemetry_received)){
   return;
 }
 
-memcpy(telemetry_received.mac_addr, mac_address, sizeof(telemetry_received.mac_addr));
-memcpy(&telemetry_received, data, sizeof(telemetry_received));
+memcpy(&telemetry_received, data, sizeof(packet));
+memcpy(telemetry_received.mac_addr, mac_address, 6);
 xQueueSend(Telemetry_Queue_ID, &telemetry_received, 0);
 
 }
